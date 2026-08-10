@@ -1,0 +1,1222 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>円形テトリス — ORBIT STACK</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --neon-cyan:#00fff2;
+    --neon-magenta:#ff2bd6;
+    --neon-violet:#b26bff;
+    --neon-yellow:#faff00;
+    --neon-green:#39ff14;
+    --neon-red:#ff2b4d;
+    --neon-blue:#3b82ff;
+    --neon-orange:#ff8c1a;
+    --bg0:#020103;
+    --bg1:#08020f;
+    --panel-bg:#0a0714;
+    --ink:#eafdfb;
+    --muted:#7f7a9e;
+    --arcade-metal1:#232030;
+    --arcade-metal2:#0c0a14;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none;}
+  html,body{height:100%;}
+  body{
+    margin:0; min-height:100%;
+    background:
+      radial-gradient(ellipse 70% 50% at 50% 0%, rgba(178,107,255,0.14), transparent 60%),
+      radial-gradient(ellipse 60% 45% at 15% 90%, rgba(0,255,242,0.08), transparent 60%),
+      radial-gradient(ellipse 60% 45% at 90% 85%, rgba(255,43,214,0.08), transparent 60%),
+      var(--bg0);
+    color:var(--ink);
+    font-family:'Rajdhani',sans-serif;
+    overflow-x:hidden;
+    position:relative;
+  }
+  .disp{font-family:'Press Start 2P',cursive;}
+  .mono{font-family:'Share Tech Mono',monospace;}
+
+  /* faint starfield + scanlines + vignette, fixed */
+  body::before{
+    content:""; position:fixed; inset:0; z-index:0; pointer-events:none;
+    background-image:
+      radial-gradient(1.5px 1.5px at 20% 30%, rgba(255,255,255,0.3), transparent 60%),
+      radial-gradient(1.5px 1.5px at 75% 15%, rgba(255,255,255,0.22), transparent 60%),
+      radial-gradient(1px 1px at 60% 70%, rgba(255,255,255,0.25), transparent 60%),
+      radial-gradient(1.5px 1.5px at 35% 82%, rgba(255,255,255,0.18), transparent 60%),
+      radial-gradient(1px 1px at 90% 55%, rgba(255,255,255,0.25), transparent 60%);
+  }
+  body::after{
+    content:""; position:fixed; inset:0; z-index:5; pointer-events:none;
+    background:repeating-linear-gradient(to bottom, rgba(255,255,255,0.028) 0px, rgba(255,255,255,0.028) 1px, transparent 2px, transparent 3px),
+      radial-gradient(ellipse 120% 90% at 50% 50%, transparent 55%, rgba(0,0,0,0.55) 100%);
+    mix-blend-mode:normal;
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:0.001ms !important; animation-iteration-count:1 !important;}
+  }
+
+  /* corner bolts — arcade cabinet feel */
+  .bolt{position:fixed; width:10px; height:10px; border-radius:50%; z-index:6; pointer-events:none;
+    background:radial-gradient(circle at 35% 30%, #cfcfe6, #46435c 55%, #0c0a14 100%);
+    box-shadow:0 0 6px rgba(0,0,0,0.8);}
+  .bolt.tl{top:10px; left:10px;} .bolt.tr{top:10px; right:10px;}
+  .bolt.bl{bottom:10px; left:10px;} .bolt.br{bottom:10px; right:10px;}
+
+  #app{position:relative; z-index:1; min-height:100vh; display:flex; flex-direction:column;
+    border:2px solid #1c1830; box-shadow:inset 0 0 60px rgba(0,0,0,0.7), inset 0 0 0 6px #060410;}
+
+  .screen{display:none; min-height:100vh; flex-direction:column; align-items:center; justify-content:center; padding:26px 14px;}
+  .screen.active{display:flex;}
+
+  /* ---------- panels: cut-corner neon terminal cards ---------- */
+  .panel{
+    background:var(--panel-bg);
+    position:relative;
+    clip-path:polygon(12px 0,100% 0,100% calc(100% - 12px),calc(100% - 12px) 100%,0 100%,0 12px);
+    box-shadow:0 0 0 1px rgba(0,255,242,0.35) inset, 0 0 22px rgba(0,255,242,0.10), 0 10px 30px rgba(0,0,0,0.5);
+  }
+  .panel.magenta{box-shadow:0 0 0 1px rgba(255,43,214,0.4) inset, 0 0 22px rgba(255,43,214,0.12), 0 10px 30px rgba(0,0,0,0.5);}
+  .panel.yellow{box-shadow:0 0 0 1px rgba(250,255,0,0.35) inset, 0 0 18px rgba(250,255,0,0.10), 0 10px 30px rgba(0,0,0,0.5);}
+
+  .btn{
+    font-family:'Press Start 2P',cursive;
+    font-size:11px; line-height:1.6;
+    color:var(--neon-cyan);
+    background:rgba(0,255,242,0.06);
+    border:none;
+    clip-path:polygon(10px 0,100% 0,100% calc(100% - 10px),calc(100% - 10px) 100%,0 100%,0 10px);
+    box-shadow:0 0 0 1px rgba(0,255,242,0.55) inset, 0 0 14px rgba(0,255,242,0.25);
+    padding:15px 26px;
+    cursor:pointer;
+    transition:transform .12s ease, box-shadow .12s ease, background .12s ease, color .12s ease;
+    text-transform:uppercase;
+  }
+  .btn:hover{transform:translateY(-2px); background:rgba(0,255,242,0.14); box-shadow:0 0 0 1px rgba(0,255,242,0.85) inset, 0 0 26px rgba(0,255,242,0.45);}
+  .btn:active{transform:translateY(0);}
+  .btn:focus-visible{outline:2px solid var(--neon-cyan); outline-offset:3px;}
+  .btn.secondary{color:var(--neon-magenta); background:rgba(255,43,214,0.06); box-shadow:0 0 0 1px rgba(255,43,214,0.55) inset, 0 0 14px rgba(255,43,214,0.25);}
+  .btn.secondary:hover{background:rgba(255,43,214,0.14); box-shadow:0 0 0 1px rgba(255,43,214,0.9) inset, 0 0 26px rgba(255,43,214,0.45);}
+  .btn.ghost{color:var(--muted); background:transparent; box-shadow:0 0 0 1px rgba(127,122,158,0.4) inset;}
+  .btn.ghost:hover{color:var(--ink); box-shadow:0 0 0 1px rgba(234,253,251,0.6) inset;}
+  .btn.small{padding:10px 18px; font-size:9px;}
+  .btn:disabled{opacity:0.3; cursor:not-allowed; transform:none;}
+
+  /* ---------- HOME ---------- */
+  #home-screen .orbit-emblem{position:relative; width:min(70vw,260px); height:min(70vw,260px); margin-bottom:2px;}
+  #home-screen .orbit-emblem svg{width:100%; height:100%; display:block;}
+  #home-screen .title-wrap{position:absolute; inset:0; display:flex; align-items:center; justify-content:center;}
+  .glitch-title{position:relative; font-size:clamp(15px,4.6vw,26px); text-align:center; color:var(--ink); line-height:1.9;}
+  .glitch-title .line{display:block;}
+  .glitch-title::before, .glitch-title::after{
+    content:attr(data-text); position:absolute; inset:0; overflow:hidden;
+  }
+  .glitch-title::before{color:var(--neon-cyan); transform:translate(2px,0); mix-blend-mode:screen; animation:glitchA 4.2s infinite steps(1);}
+  .glitch-title::after{color:var(--neon-magenta); transform:translate(-2px,0); mix-blend-mode:screen; animation:glitchB 4.2s infinite steps(1);}
+  @keyframes glitchA{0%,88%,100%{clip-path:inset(0 0 0 0); transform:translate(2px,0);} 90%{clip-path:inset(10% 0 60% 0); transform:translate(4px,-1px);} 93%{clip-path:inset(60% 0 5% 0); transform:translate(-3px,1px);} 96%{clip-path:inset(30% 0 40% 0); transform:translate(3px,0);}}
+  @keyframes glitchB{0%,88%,100%{clip-path:inset(0 0 0 0); transform:translate(-2px,0);} 91%{clip-path:inset(40% 0 20% 0); transform:translate(-4px,1px);} 94%{clip-path:inset(5% 0 70% 0); transform:translate(3px,-1px);} 97%{clip-path:inset(55% 0 10% 0); transform:translate(-3px,0);}}
+  #home-screen h1{margin:0; font-size:clamp(15px,4.6vw,26px); text-shadow:0 0 16px rgba(0,255,242,0.6);}
+  #home-screen h1 .accent{color:var(--neon-magenta); text-shadow:0 0 16px rgba(255,43,214,0.7);}
+  .tagline{margin:20px 0 26px; color:var(--muted); font-size:13px; letter-spacing:0.14em; text-align:center; font-family:'Share Tech Mono',monospace;}
+  #home-screen .menu{display:flex; flex-direction:column; gap:14px; width:min(84vw,290px);}
+  .board-panel{width:min(86vw,340px); margin-top:26px; padding:16px 18px;}
+  .board-panel h3{margin:0 0 10px; font-size:10px; letter-spacing:0.12em; color:var(--neon-yellow); font-family:'Press Start 2P',cursive; text-shadow:0 0 10px rgba(250,255,0,0.5);}
+  .rank-row{display:flex; align-items:center; gap:10px; padding:5px 0; font-family:'Share Tech Mono',monospace; font-size:13px; border-bottom:1px dashed rgba(127,122,158,0.25);}
+  .rank-row:last-child{border-bottom:none;}
+  .rank-row .rk{color:var(--neon-yellow); width:22px;}
+  .rank-row .sc{color:var(--ink); flex:1;}
+  .rank-row .lv{color:var(--neon-cyan); font-size:11px;}
+  .empty-rank{color:var(--muted); font-size:12px; font-family:'Share Tech Mono',monospace; text-align:center; padding:6px 0;}
+  .footnote{margin-top:22px; font-size:10px; color:var(--muted); opacity:0.7; text-align:center; max-width:340px; line-height:1.8; font-family:'Share Tech Mono',monospace;}
+
+  /* ---------- SETTINGS ---------- */
+  #settings-screen .settings-panel{width:min(92vw,480px); padding:28px 24px 24px;}
+  #settings-screen h2{margin:0 0 22px; font-size:15px; text-align:center; color:var(--neon-cyan); font-family:'Press Start 2P',cursive; text-shadow:0 0 12px rgba(0,255,242,0.6);}
+  .field{margin-bottom:22px;}
+  .field label.field-title{display:block; font-size:11px; color:var(--muted); letter-spacing:0.12em; text-transform:uppercase; margin-bottom:10px; font-family:'Share Tech Mono',monospace;}
+  .seg{display:flex; gap:8px;}
+  .seg button{
+    flex:1; padding:10px 4px; font-family:'Share Tech Mono',monospace; font-weight:600; font-size:12px;
+    background:rgba(255,255,255,0.02); border:1px solid rgba(127,122,158,0.35); color:var(--muted);
+    cursor:pointer; transition:.15s;
+  }
+  .seg button.active{background:rgba(0,255,242,0.12); border-color:var(--neon-cyan); color:var(--neon-cyan); box-shadow:0 0 10px rgba(0,255,242,0.3) inset;}
+  .row-between{display:flex; align-items:center; justify-content:space-between;}
+  input[type="range"]{width:100%; accent-color:var(--neon-cyan);}
+  .switch{position:relative; width:44px; height:24px; flex-shrink:0;}
+  .switch input{opacity:0; width:0; height:0;}
+  .slider-toggle{position:absolute; cursor:pointer; inset:0; background:rgba(255,255,255,0.06); border:1px solid rgba(127,122,158,0.4); transition:.2s;}
+  .slider-toggle::before{content:""; position:absolute; width:16px; height:16px; left:3px; top:3px; background:var(--muted); transition:.2s;}
+  .switch input:checked + .slider-toggle{background:rgba(0,255,242,0.2); border-color:var(--neon-cyan);}
+  .switch input:checked + .slider-toggle::before{transform:translateX(20px); background:var(--neon-cyan); box-shadow:0 0 8px var(--neon-cyan);}
+  .settings-nav{display:flex; gap:12px; margin-top:24px;}
+  .settings-nav .btn{flex:1;}
+  .value-pill{font-family:'Share Tech Mono',monospace; color:var(--neon-yellow); font-size:12px;}
+  .keymap{display:grid; grid-template-columns:auto 1fr; gap:7px 14px; font-size:12px; color:var(--muted); margin-top:6px; font-family:'Rajdhani',sans-serif;}
+  .keymap span.k{color:var(--neon-cyan); font-family:'Share Tech Mono',monospace; background:rgba(0,255,242,0.06); padding:2px 8px; border:1px solid rgba(0,255,242,0.3); justify-self:start;}
+
+  /* ---------- GAME ---------- */
+  #game-screen{padding:12px 8px; justify-content:flex-start;}
+  #game-container{width:100%; max-width:1000px; margin:0 auto; display:flex; gap:16px; align-items:flex-start; justify-content:center; flex-wrap:wrap;}
+
+  #board-wrap{position:relative; flex-shrink:0; width:min(94vw,560px); height:min(94vw,560px);}
+  .porthole-ring{
+    position:absolute; inset:-16px; border-radius:50%;
+    background:conic-gradient(from 0deg, #2a2640, #0c0a14 15%, #3a3555 30%, #0c0a14 45%, #2a2640 60%, #0c0a14 75%, #3a3555 90%, #2a2640 100%);
+    box-shadow:0 0 0 2px rgba(0,255,242,0.25), 0 0 30px rgba(178,107,255,0.25), inset 0 0 30px rgba(0,0,0,0.8);
+  }
+  .porthole-ring::before{
+    content:""; position:absolute; inset:12px; border-radius:50%;
+    background:#050308;
+    box-shadow:inset 0 0 40px rgba(0,255,242,0.08);
+  }
+  #board-canvas{position:relative; display:block; width:100%; height:100%;}
+  #mute-btn{
+    position:absolute; top:2px; left:2px; z-index:3; width:34px; height:34px; border-radius:50%;
+    background:rgba(10,7,20,0.8); border:1px solid rgba(0,255,242,0.4); color:var(--neon-cyan);
+    font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center;
+  }
+  #danger-vignette{position:absolute; inset:-20px; border-radius:50%; pointer-events:none; box-shadow:0 0 0 0 rgba(255,43,77,0); transition:box-shadow .4s ease; z-index:2;}
+  #danger-vignette.on{box-shadow:0 0 70px 14px rgba(255,43,77,0.55); animation:pulse-danger .9s infinite;}
+  @keyframes pulse-danger{0%,100%{opacity:0.55;}50%{opacity:1;}}
+
+  #side-panel{width:250px; max-width:92vw; display:flex; flex-direction:column; gap:12px;}
+  .stat-card{padding:13px 16px;}
+  .stat-label{font-size:10px; letter-spacing:0.14em; color:var(--muted); text-transform:uppercase; margin-bottom:4px; font-family:'Share Tech Mono',monospace;}
+  .stat-value{font-family:'Share Tech Mono',monospace; font-size:24px; color:var(--ink); text-shadow:0 0 8px rgba(234,253,251,0.3);}
+  .level-row{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:8px;}
+  .level-row .stat-value{font-size:20px; color:var(--neon-yellow); text-shadow:0 0 10px rgba(250,255,0,0.5);}
+  .xp-track{height:10px; background:rgba(255,255,255,0.06); overflow:hidden; border:1px solid rgba(127,122,158,0.3);}
+  .xp-fill{height:100%; width:0%; background:linear-gradient(90deg, var(--neon-cyan), var(--neon-yellow)); box-shadow:0 0 10px rgba(0,255,242,0.6); transition:width .25s ease;}
+  .xp-caption{margin-top:6px; font-size:10px; color:var(--muted); font-family:'Share Tech Mono',monospace; text-align:right;}
+  .mini-row{display:flex; gap:12px;}
+  .mini-card{flex:1; padding:10px; text-align:center;}
+  .mini-card .stat-label{margin-bottom:6px;}
+  .piece-canvas{width:100%; aspect-ratio:1/1; display:block;}
+  .queue-card{padding:10px 12px;}
+  .queue-list{display:flex; gap:8px; margin-top:6px;}
+  .queue-list canvas{width:50px; height:50px; background:rgba(255,255,255,0.02); border:1px solid rgba(127,122,158,0.2);}
+  .toast-stack{position:absolute; top:8%; left:50%; transform:translateX(-50%); display:flex; flex-direction:column; align-items:center; gap:6px; z-index:4; pointer-events:none;}
+  .toast{font-family:'Press Start 2P',cursive; font-size:12px; white-space:nowrap; opacity:0; transform:translateY(-6px); transition:opacity .2s ease, transform .2s ease;}
+  .toast.show{opacity:1; transform:translateY(0);}
+  #hint-bar{margin-top:6px; text-align:center; font-size:10px; color:var(--muted); letter-spacing:0.05em; font-family:'Share Tech Mono',monospace;}
+
+  /* touch controls */
+  #touch-controls{display:flex; flex-direction:column; gap:8px; width:min(94vw,360px); margin-top:6px;}
+  .tc-row{display:flex; gap:8px; justify-content:center;}
+  .tc-btn{
+    flex:1; padding:14px 0; font-family:'Press Start 2P',cursive; font-size:13px; color:var(--neon-cyan);
+    background:rgba(0,255,242,0.05); border:1px solid rgba(0,255,242,0.35); touch-action:none; cursor:pointer;
+  }
+  .tc-btn:active{background:rgba(0,255,242,0.22);}
+  .tc-btn.accent{color:var(--neon-magenta); border-color:rgba(255,43,214,0.4); background:rgba(255,43,214,0.05);}
+  .tc-btn.accent:active{background:rgba(255,43,214,0.22);}
+  .tc-btn.wide{flex:2;}
+
+  .overlay{position:fixed; inset:0; display:none; align-items:center; justify-content:center; background:rgba(2,1,3,0.82); z-index:20; padding:16px;}
+  .overlay.show{display:flex;}
+  .overlay-panel{width:min(90vw,340px); padding:30px 26px; text-align:center;}
+  .overlay-panel h2{margin:0 0 6px; font-size:18px; color:var(--neon-cyan); font-family:'Press Start 2P',cursive; text-shadow:0 0 14px rgba(0,255,242,0.6);}
+  .overlay-panel .sub{color:var(--muted); font-size:12px; margin-bottom:20px; font-family:'Share Tech Mono',monospace;}
+  .final-stats{display:flex; flex-direction:column; gap:8px; margin-bottom:24px;}
+  .final-stats .row-between{font-size:13px; font-family:'Share Tech Mono',monospace;}
+  .final-stats .row-between b{color:var(--neon-yellow); font-size:16px; text-shadow:0 0 8px rgba(250,255,0,0.5);}
+  .overlay-actions{display:flex; flex-direction:column; gap:10px;}
+
+  @media (max-width:640px){ #side-panel{width:min(92vw,480px);} }
+</style>
+</head>
+<body>
+<div class="bolt tl"></div><div class="bolt tr"></div><div class="bolt bl"></div><div class="bolt br"></div>
+<div id="app">
+
+  <!-- ============ HOME ============ -->
+  <section id="home-screen" class="screen active">
+    <div class="orbit-emblem">
+      <svg viewBox="0 0 300 300">
+        <defs>
+          <radialGradient id="coreGlow" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#00fff2" stop-opacity="0.95"/>
+            <stop offset="100%" stop-color="#00fff2" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <circle cx="150" cy="150" r="20" fill="url(#coreGlow)"/>
+        <circle cx="150" cy="150" r="6" fill="#eafdfb"/>
+        <circle cx="150" cy="150" r="52" fill="none" stroke="rgba(0,255,242,0.45)" stroke-width="1.5" stroke-dasharray="4 7"/>
+        <circle cx="150" cy="150" r="92" fill="none" stroke="rgba(255,43,214,0.35)" stroke-width="1.5" stroke-dasharray="2 9"/>
+        <circle cx="150" cy="150" r="134" fill="none" stroke="rgba(250,255,0,0.28)" stroke-width="1.5" stroke-dasharray="3 11"/>
+      </svg>
+      <div class="title-wrap">
+        <h1 class="glitch-title" data-text="円形テトリス&#10;ORBIT STACK">
+          <span class="line">円形テトリス</span>
+          <span class="line accent">ORBIT STACK</span>
+        </h1>
+      </div>
+    </div>
+    <div class="tagline">&gt; PRESS START TO INITIALIZE ORBIT &lt;</div>
+    <div class="menu">
+      <button class="btn" id="btn-start">ゲームスタート</button>
+      <button class="btn secondary" id="btn-settings">設定</button>
+    </div>
+
+    <div class="panel yellow board-panel">
+      <h3>TOP 5 RANKING (SESSION)</h3>
+      <div id="leaderboard-list"><div class="empty-rank">まだ記録がありません — 1面遊んで刻もう</div></div>
+    </div>
+
+    <div class="footnote">設定・記録はこのブラウザタブを閉じるまで保持されます。<br>矢印キーで移動・回転、スペースでハードドロップ、モバイルは下部ボタン対応。</div>
+  </section>
+
+  <!-- ============ SETTINGS ============ -->
+  <section id="settings-screen" class="screen">
+    <div class="settings-panel panel">
+      <h2>SETTINGS</h2>
+
+      <div class="field">
+        <label class="field-title">盤面サイズ（リング数）</label>
+        <div class="seg" id="seg-boardsize">
+          <button data-value="small">小 10段</button>
+          <button data-value="medium">中 16段</button>
+          <button data-value="large">大 22段</button>
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="row-between">
+          <label class="field-title" style="margin-bottom:0;">開始レベル</label>
+          <span class="value-pill" id="startlevel-value">1</span>
+        </div>
+        <input type="range" id="range-startlevel" min="1" max="10" value="1" step="1">
+      </div>
+
+      <div class="field">
+        <div class="row-between">
+          <label class="field-title" style="margin-bottom:0;">音量</label>
+          <span class="value-pill" id="volume-value">70%</span>
+        </div>
+        <input type="range" id="range-volume" min="0" max="100" value="70" step="5">
+      </div>
+
+      <div class="field">
+        <div class="row-between">
+          <span class="field-title" style="margin-bottom:0;">サウンド</span>
+          <label class="switch"><input type="checkbox" id="toggle-sound" checked><span class="slider-toggle"></span></label>
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="row-between">
+          <span class="field-title" style="margin-bottom:0;">ゴーストピース表示</span>
+          <label class="switch"><input type="checkbox" id="toggle-ghost" checked><span class="slider-toggle"></span></label>
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="row-between">
+          <span class="field-title" style="margin-bottom:0;">盤面ゆっくり回転（演出）</span>
+          <label class="switch"><input type="checkbox" id="toggle-rotateboard"><span class="slider-toggle"></span></label>
+        </div>
+      </div>
+
+      <div class="field">
+        <div class="row-between">
+          <span class="field-title" style="margin-bottom:0;">パーティクル / 画面振動</span>
+          <label class="switch"><input type="checkbox" id="toggle-effects" checked><span class="slider-toggle"></span></label>
+        </div>
+      </div>
+
+      <div class="field" style="margin-bottom:4px;">
+        <label class="field-title">操作方法</label>
+        <div class="keymap">
+          <span class="k">← →</span><span>円周方向に移動</span>
+          <span class="k">↑ / X</span><span>ピース回転（時計回り）</span>
+          <span class="k">Z</span><span>ピース回転（反時計回り）</span>
+          <span class="k">↓</span><span>ソフトドロップ</span>
+          <span class="k">Space</span><span>ハードドロップ</span>
+          <span class="k">C</span><span>ホールド</span>
+          <span class="k">P / Esc</span><span>ポーズ</span>
+        </div>
+      </div>
+
+      <div class="settings-nav">
+        <button class="btn ghost small" id="btn-settings-back">戻る</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ GAME ============ -->
+  <section id="game-screen" class="screen">
+    <div id="game-container">
+      <div id="board-wrap">
+        <div class="porthole-ring"></div>
+        <div id="danger-vignette"></div>
+        <button id="mute-btn">🔊</button>
+        <canvas id="board-canvas" width="640" height="640"></canvas>
+        <div class="toast-stack" id="toast-stack"></div>
+      </div>
+
+      <div id="side-panel">
+        <div class="panel stat-card">
+          <div class="stat-label">SCORE</div>
+          <div class="stat-value mono" id="stat-score">0</div>
+        </div>
+
+        <div class="panel stat-card yellow">
+          <div class="level-row">
+            <div class="stat-label">LEVEL</div>
+            <div class="stat-value mono" id="stat-level">1</div>
+          </div>
+          <div class="xp-track"><div class="xp-fill" id="xp-fill"></div></div>
+          <div class="xp-caption"><span id="xp-current">0</span> / <span id="xp-needed">80</span> XP</div>
+        </div>
+
+        <div class="mini-row">
+          <div class="panel mini-card">
+            <div class="stat-label">LINES</div>
+            <div class="stat-value mono" id="stat-lines" style="font-size:18px;">0</div>
+          </div>
+          <div class="panel mini-card magenta">
+            <div class="stat-label">COMBO</div>
+            <div class="stat-value mono" id="stat-combo" style="font-size:18px;">0</div>
+          </div>
+        </div>
+
+        <div class="mini-row">
+          <div class="panel mini-card">
+            <div class="stat-label">HOLD [C]</div>
+            <canvas class="piece-canvas" id="hold-canvas" width="90" height="90"></canvas>
+          </div>
+          <div class="panel queue-card" style="flex:1.4;">
+            <div class="stat-label">NEXT</div>
+            <div class="queue-list">
+              <canvas width="90" height="90"></canvas>
+              <canvas width="90" height="90"></canvas>
+              <canvas width="90" height="90"></canvas>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:center;">
+          <button class="btn ghost small" id="btn-pause">ポーズ</button>
+        </div>
+        <div id="hint-bar">← → 移動 ・ ↑ 回転 ・ ↓ ソフト ・ Space ハード ・ C ホールド</div>
+
+        <div id="touch-controls">
+          <div class="tc-row">
+            <button class="tc-btn" data-action="rotateL">⟲</button>
+            <button class="tc-btn" data-action="left">◀</button>
+            <button class="tc-btn" data-action="down">▼</button>
+            <button class="tc-btn" data-action="right">▶</button>
+            <button class="tc-btn" data-action="rotateR">⟳</button>
+          </div>
+          <div class="tc-row">
+            <button class="tc-btn wide" data-action="hold">HOLD</button>
+            <button class="tc-btn wide accent" data-action="harddrop">DROP</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PAUSE OVERLAY ============ -->
+  <div class="overlay" id="pause-overlay">
+    <div class="panel overlay-panel">
+      <h2>PAUSED</h2>
+      <div class="sub">一時停止中</div>
+      <div class="overlay-actions">
+        <button class="btn" id="btn-resume">再開する</button>
+        <button class="btn secondary" id="btn-restart-from-pause">リスタート</button>
+        <button class="btn ghost" id="btn-home-from-pause">ホームへ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ GAME OVER OVERLAY ============ -->
+  <div class="overlay" id="gameover-overlay">
+    <div class="panel overlay-panel">
+      <h2>GAME OVER</h2>
+      <div class="sub">中心にスタックが到達しました</div>
+      <div class="final-stats">
+        <div class="row-between"><span>スコア</span><b id="final-score" class="mono">0</b></div>
+        <div class="row-between"><span>到達レベル</span><b id="final-level" class="mono">1</b></div>
+        <div class="row-between"><span>消去ライン</span><b id="final-lines" class="mono">0</b></div>
+      </div>
+      <div class="overlay-actions">
+        <button class="btn" id="btn-retry">もう一度</button>
+        <button class="btn ghost" id="btn-home-from-over">ホームへ</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ============================================================
+     CONSTANTS / SHAPE DATA
+     ============================================================ */
+  var BOARD_PRESETS = {
+    small:  { rings: 10, sectors: 12 },
+    medium: { rings: 16, sectors: 14 },
+    large:  { rings: 22, sectors: 16 }
+  };
+
+  var COLORS = {
+    I: '#00fff2', O: '#faff00', T: '#b26bff',
+    S: '#39ff14', Z: '#ff2b4d', J: '#3b82ff', L: '#ff8c1a'
+  };
+
+  var SHAPES = {
+    I: [
+      [[1,0],[1,1],[1,2],[1,3]],
+      [[0,2],[1,2],[2,2],[3,2]],
+      [[2,0],[2,1],[2,2],[2,3]],
+      [[0,1],[1,1],[2,1],[3,1]]
+    ],
+    O: [
+      [[1,1],[1,2],[2,1],[2,2]],
+      [[1,1],[1,2],[2,1],[2,2]],
+      [[1,1],[1,2],[2,1],[2,2]],
+      [[1,1],[1,2],[2,1],[2,2]]
+    ],
+    T: [
+      [[0,1],[1,0],[1,1],[1,2]],
+      [[0,1],[1,1],[1,2],[2,1]],
+      [[1,0],[1,1],[1,2],[2,1]],
+      [[0,1],[1,0],[1,1],[2,1]]
+    ],
+    S: [
+      [[0,1],[0,2],[1,0],[1,1]],
+      [[0,1],[1,1],[1,2],[2,2]],
+      [[1,1],[1,2],[2,0],[2,1]],
+      [[0,0],[1,0],[1,1],[2,1]]
+    ],
+    Z: [
+      [[0,0],[0,1],[1,1],[1,2]],
+      [[0,2],[1,1],[1,2],[2,1]],
+      [[1,0],[1,1],[2,1],[2,2]],
+      [[0,1],[1,0],[1,1],[2,0]]
+    ],
+    J: [
+      [[0,0],[1,0],[1,1],[1,2]],
+      [[0,1],[0,2],[1,1],[2,1]],
+      [[1,0],[1,1],[1,2],[2,2]],
+      [[0,1],[1,1],[2,0],[2,1]]
+    ],
+    L: [
+      [[0,2],[1,0],[1,1],[1,2]],
+      [[0,1],[1,1],[2,1],[2,2]],
+      [[1,0],[1,1],[1,2],[2,0]],
+      [[0,0],[0,1],[1,1],[2,1]]
+    ]
+  };
+  var PIECE_TYPES = ['I','O','T','S','Z','J','L'];
+
+  /* ============================================================
+     STATE
+     ============================================================ */
+  var settings = {
+    boardSize: 'medium',
+    startLevel: 1,
+    ghost: true,
+    rotateBoard: false,
+    sound: true,
+    volume: 0.7,
+    effects: true
+  };
+
+  var RINGS = 16, SECTORS = 14;
+  var state = null;
+  var animHandle = null;
+  var lastTs = 0;
+  var sessionLeaderboard = [];
+
+  function resetState(){
+    var preset = BOARD_PRESETS[settings.boardSize];
+    RINGS = preset.rings;
+    SECTORS = preset.sectors;
+    var board = [];
+    for (var r=0;r<RINGS;r++){ board.push(new Array(SECTORS).fill(null)); }
+
+    state = {
+      board: board,
+      queue: [],
+      current: null,
+      holdType: null,
+      canHold: true,
+      score: 0,
+      xp: 0,
+      level: settings.startLevel,
+      lines: 0,
+      combo: 0,
+      dropInterval: dropIntervalForLevel(settings.startLevel),
+      dropTimer: 0,
+      paused: false,
+      gameOver: false,
+      flashRows: [],
+      flashTimer: 0,
+      boardAngle: 0,
+      particles: [],
+      shakeTime: 0,
+      shakeMag: 0
+    };
+    refillQueue();
+    spawnPiece();
+  }
+
+  function dropIntervalForLevel(level){ return Math.max(100, 800 - (level-1)*36); }
+  function xpToNext(level){ return 80 + (level-1)*26; }
+
+  function shuffle(arr){
+    for (var i=arr.length-1;i>0;i--){
+      var j = Math.floor(Math.random()*(i+1));
+      var tmp = arr[i]; arr[i]=arr[j]; arr[j]=tmp;
+    }
+    return arr;
+  }
+  function refillQueue(){
+    while(state.queue.length < 5){
+      var bag = shuffle(PIECE_TYPES.slice());
+      for (var i=0;i<bag.length;i++) state.queue.push(bag[i]);
+    }
+  }
+
+  /* ============================================================
+     CORE GAME LOGIC
+     ============================================================ */
+  function wrapCol(c){ return ((c % SECTORS) + SECTORS) % SECTORS; }
+  function spawnCol(){ return Math.floor(SECTORS/2) - 2; }
+
+  function spawnPiece(){
+    refillQueue();
+    var type = state.queue.shift();
+    refillQueue();
+    var piece = { type: type, rotation: 0, row: 0, col: spawnCol() };
+    if (collide(piece, 0, 0)){ triggerGameOver(); return; }
+    state.current = piece;
+    state.canHold = true;
+  }
+
+  function currentShape(piece){ return SHAPES[piece.type][piece.rotation]; }
+
+  function collide(piece, dRow, dCol){
+    var shape = currentShape(piece);
+    for (var i=0;i<shape.length;i++){
+      var r = piece.row + shape[i][0] + dRow;
+      var c = wrapCol(piece.col + shape[i][1] + dCol);
+      if (r >= RINGS) return true;
+      if (r >= 0 && state.board[r][c]) return true;
+    }
+    return false;
+  }
+  function collideAt(type, rotation, row, col){
+    var shape = SHAPES[type][rotation];
+    for (var i=0;i<shape.length;i++){
+      var r = row + shape[i][0];
+      var c = wrapCol(col + shape[i][1]);
+      if (r >= RINGS) return true;
+      if (r >= 0 && state.board[r][c]) return true;
+    }
+    return false;
+  }
+
+  function moveHorizontal(dir){
+    if (!state.current || state.paused || state.gameOver || state.flashTimer>0) return;
+    if (!collide(state.current, 0, dir)) state.current.col = wrapCol(state.current.col + dir);
+  }
+
+  function rotatePiece(dir){
+    if (!state.current || state.paused || state.gameOver || state.flashTimer>0) return;
+    var p = state.current;
+    if (p.type === 'O') return;
+    var nextRot = (p.rotation + dir + 4) % 4;
+    var kicks = [0, -1, 1, -2, 2];
+    for (var k=0;k<kicks.length;k++){
+      if (!collideAt(p.type, nextRot, p.row, p.col + kicks[k])){
+        p.rotation = nextRot; p.col = wrapCol(p.col + kicks[k]); playSound('rotate'); return;
+      }
+    }
+    if (!collideAt(p.type, nextRot, p.row - 1, p.col)){
+      p.rotation = nextRot; p.row -= 1; playSound('rotate');
+    }
+  }
+
+  function ghostRowFor(piece){
+    var r = 0;
+    while(!collide(piece, r+1, 0)) r++;
+    return piece.row + r;
+  }
+
+  function softDropStep(manual){
+    if (!state.current || state.paused || state.gameOver || state.flashTimer>0) return;
+    if (!collide(state.current, 1, 0)){
+      state.current.row += 1;
+      if (manual){ state.score += 1; state.xp += 1; checkLevelUp(); }
+      state.dropTimer = 0;
+    } else {
+      lockPiece();
+    }
+  }
+
+  function hardDrop(){
+    if (!state.current || state.paused || state.gameOver || state.flashTimer>0) return;
+    var cells = 0;
+    while(!collide(state.current, 1, 0)){ state.current.row += 1; cells++; }
+    state.score += cells*2;
+    state.xp += cells*2;
+    checkLevelUp();
+    if (cells >= 3) applyShake(6, 160);
+    lockPiece();
+  }
+
+  function applyShake(mag, dur){
+    if (!settings.effects) return;
+    state.shakeMag = mag; state.shakeTime = dur;
+  }
+
+  function cellCenter(row, col){
+    var rad = ringRadii(row);
+    var midR = (rad.outer + rad.inner)/2;
+    var a = ((col+0.5)/SECTORS)*Math.PI*2 - Math.PI/2;
+    return { x: CX + Math.cos(a)*midR, y: CY + Math.sin(a)*midR };
+  }
+
+  function spawnParticles(rows){
+    if (!settings.effects) return;
+    for (var i=0;i<rows.length;i++){
+      var r = rows[i];
+      for (var c=0;c<SECTORS;c++){
+        var color = state.board[r][c] || '#eafdfb';
+        var p0 = cellCenter(r,c);
+        var n = 2;
+        for (var k=0;k<n;k++){
+          var ang = Math.random()*Math.PI*2;
+          var spd = 0.7 + Math.random()*1.8;
+          state.particles.push({
+            x:p0.x, y:p0.y,
+            vx:Math.cos(ang)*spd, vy:Math.sin(ang)*spd,
+            life: 420+Math.random()*260, maxLife: 680,
+            size: 1.6+Math.random()*2.2, color: color
+          });
+        }
+      }
+    }
+  }
+
+  function lockPiece(){
+    var p = state.current;
+    var shape = currentShape(p);
+    var offField = false;
+    for (var i=0;i<shape.length;i++){
+      var r = p.row + shape[i][0];
+      var c = wrapCol(p.col + shape[i][1]);
+      if (r < 0){ offField = true; continue; }
+      if (r < RINGS) state.board[r][c] = COLORS[p.type];
+    }
+    playSound('lock');
+    if (offField){ triggerGameOver(); return; }
+
+    var full = [];
+    for (var r2=0;r2<RINGS;r2++){
+      var isFull = true;
+      for (var c2=0;c2<SECTORS;c2++){ if (!state.board[r2][c2]){ isFull=false; break; } }
+      if (isFull) full.push(r2);
+    }
+    state.current = null;
+    if (full.length > 0){
+      spawnParticles(full);
+      if (full.length >= 4) applyShake(9, 260);
+      state.flashRows = full;
+      state.flashTimer = 220;
+    } else {
+      state.combo = 0;
+      updateComboUI();
+      spawnPiece();
+    }
+  }
+
+  function finishClear(){
+    var full = state.flashRows;
+    var n = full.length;
+    var fullSet = {};
+    for (var i=0;i<n;i++) fullSet[full[i]] = true;
+    var newBoard = [];
+    for (var r=0;r<RINGS;r++){ if (!fullSet[r]) newBoard.push(state.board[r]); }
+    while(newBoard.length < RINGS){ newBoard.unshift(new Array(SECTORS).fill(null)); }
+    state.board = newBoard;
+
+    state.lines += n;
+    state.combo += 1;
+    var table = {1:100, 2:300, 3:500, 4:800};
+    var base = table[Math.min(n,4)] || 800;
+    var comboBonus = state.combo > 1 ? 50*(state.combo-1)*state.level : 0;
+    state.score += base*state.level + comboBonus;
+    state.xp += n*25 + (state.combo>1 ? (state.combo-1)*10 : 0);
+    checkLevelUp();
+    updateComboUI();
+    if (n >= 4) showToast('QUAD CLEAR!', 'var(--neon-magenta)');
+    else if (state.combo > 1) showToast('COMBO x' + state.combo + '!', 'var(--neon-cyan)');
+    playSound(n>=4 ? 'tetris' : 'clear');
+
+    state.flashRows = [];
+    state.flashTimer = 0;
+    spawnPiece();
+  }
+
+  function checkLevelUp(){
+    var leveledUp = false;
+    while(state.xp >= xpToNext(state.level)){
+      state.xp -= xpToNext(state.level);
+      state.level += 1;
+      state.dropInterval = dropIntervalForLevel(state.level);
+      leveledUp = true;
+    }
+    if (leveledUp){
+      playSound('levelup');
+      showToast('LEVEL UP! Lv.' + state.level, 'var(--neon-yellow)');
+    }
+  }
+
+  function holdPiece(){
+    if (!state.current || !state.canHold || state.paused || state.gameOver || state.flashTimer>0) return;
+    playSound('hold');
+    var curType = state.current.type;
+    if (state.holdType === null){
+      state.holdType = curType;
+      spawnPiece();
+    } else {
+      var swapType = state.holdType;
+      state.holdType = curType;
+      var np = { type: swapType, rotation: 0, row: 0, col: spawnCol() };
+      if (collide(np, 0, 0)){ triggerGameOver(); return; }
+      state.current = np;
+    }
+    state.canHold = false;
+  }
+
+  function triggerGameOver(){
+    state.gameOver = true;
+    state.current = null;
+    playSound('gameover');
+    sessionLeaderboard.push({ score: state.score, level: state.level, lines: state.lines });
+    sessionLeaderboard.sort(function(a,b){ return b.score - a.score; });
+    sessionLeaderboard = sessionLeaderboard.slice(0,5);
+    document.getElementById('final-score').textContent = state.score;
+    document.getElementById('final-level').textContent = state.level;
+    document.getElementById('final-lines').textContent = state.lines;
+    document.getElementById('gameover-overlay').classList.add('show');
+    stopLoop();
+  }
+
+  /* ============================================================
+     SOUND
+     ============================================================ */
+  var actx = null;
+  function ensureAudio(){
+    if (!settings.sound) return null;
+    if (!actx){ try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e){ return null; } }
+    if (actx.state === 'suspended') actx.resume();
+    return actx;
+  }
+  function playSound(name){
+    if (!settings.sound || settings.volume<=0) return;
+    var ctx = ensureAudio();
+    if (!ctx) return;
+    var t0 = ctx.currentTime;
+    var osc = ctx.createOscillator();
+    var gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    var freq = 440, dur = 0.08, type='sine', vol=0.05;
+    if (name==='rotate'){ freq=520; dur=0.05; type='triangle'; vol=0.035; }
+    else if (name==='lock'){ freq=180; dur=0.06; type='square'; vol=0.03; }
+    else if (name==='clear'){ freq=660; dur=0.14; type='sine'; vol=0.06; }
+    else if (name==='tetris'){ freq=880; dur=0.22; type='sawtooth'; vol=0.06; }
+    else if (name==='levelup'){ freq=990; dur=0.28; type='sine'; vol=0.07; }
+    else if (name==='hold'){ freq=340; dur=0.06; type='triangle'; vol=0.03; }
+    else if (name==='gameover'){ freq=140; dur=0.5; type='sawtooth'; vol=0.06; }
+    vol *= settings.volume;
+    osc.type = type; osc.frequency.setValueAtTime(freq, t0);
+    if (name==='tetris' || name==='levelup') osc.frequency.exponentialRampToValueAtTime(freq*1.6, t0+dur*0.9);
+    gain.gain.setValueAtTime(vol, t0);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0+dur);
+    osc.start(t0); osc.stop(t0+dur+0.02);
+  }
+
+  /* ============================================================
+     RENDERING
+     ============================================================ */
+  var canvas = document.getElementById('board-canvas');
+  var ctx = canvas.getContext('2d');
+  var CW = canvas.width, CH = canvas.height;
+  var CX = CW/2, CY = CH/2;
+  var R_MAX = CW*0.47;
+  var R_MIN = CW*0.065;
+
+  function ringRadii(row){
+    var ringWidth = (R_MAX - R_MIN) / RINGS;
+    return { outer: R_MAX - row*ringWidth, inner: R_MAX - (row+1)*ringWidth };
+  }
+
+  function cellPath(row, col){
+    var rad = ringRadii(row);
+    var a0 = (col/SECTORS)*Math.PI*2 - Math.PI/2;
+    var a1 = ((col+1)/SECTORS)*Math.PI*2 - Math.PI/2;
+    var gap = 0.016;
+    ctx.beginPath();
+    ctx.arc(CX, CY, Math.max(rad.outer-1.2,0), a0+gap, a1-gap, false);
+    ctx.arc(CX, CY, Math.max(rad.inner+1.2,0), a1-gap, a0+gap, true);
+    ctx.closePath();
+  }
+
+  function drawCell(row, col, color, alpha, strokeOnly, glow){
+    if (row < 0 || row >= RINGS) return;
+    cellPath(row, col);
+    ctx.globalAlpha = alpha;
+    if (glow){ ctx.shadowColor = color; ctx.shadowBlur = glow; } else { ctx.shadowBlur = 0; }
+    if (strokeOnly){ ctx.lineWidth = 2; ctx.strokeStyle = color; ctx.stroke(); }
+    else { ctx.fillStyle = color; ctx.fill(); }
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 1;
+  }
+
+  function renderBoard(ts, dt){
+    ctx.clearRect(0,0,CW,CH);
+    ctx.save();
+
+    if (state.shakeTime > 0){
+      state.shakeTime -= dt;
+      var sx = (Math.random()-0.5)*state.shakeMag;
+      var sy = (Math.random()-0.5)*state.shakeMag;
+      ctx.translate(sx, sy);
+    }
+    if (settings.rotateBoard){
+      state.boardAngle += 0.0012;
+      ctx.translate(CX,CY); ctx.rotate(state.boardAngle); ctx.translate(-CX,-CY);
+    }
+
+    for (var r=0;r<RINGS;r++){
+      var isFlash = state.flashTimer>0 && state.flashRows.indexOf(r) !== -1;
+      for (var c=0;c<SECTORS;c++){
+        var cell = state.board[r][c];
+        if (isFlash){
+          var pulse = 0.5 + 0.5*Math.sin(ts/35);
+          drawCell(r,c, '#ffffff', 0.6+0.4*pulse, false, 16);
+        } else if (cell){
+          drawCell(r,c, cell, 0.95, false, 8);
+        } else {
+          drawCell(r,c, 'rgba(255,255,255,0.035)', 1, false, 0);
+          drawCell(r,c, 'rgba(178,107,255,0.16)', 1, true, 0);
+        }
+      }
+    }
+
+    if (settings.ghost && state.current && state.flashTimer===0){
+      var gRow = ghostRowFor(state.current);
+      var shapeG = currentShape(state.current);
+      for (var i=0;i<shapeG.length;i++){
+        var rr = gRow + shapeG[i][0];
+        var cc = wrapCol(state.current.col + shapeG[i][1]);
+        if (rr>=0) drawCell(rr, cc, COLORS[state.current.type], 0.9, true, 6);
+      }
+    }
+
+    if (state.current && state.flashTimer===0){
+      var shapeC = currentShape(state.current);
+      for (var j=0;j<shapeC.length;j++){
+        var r2 = state.current.row + shapeC[j][0];
+        var c2 = wrapCol(state.current.col + shapeC[j][1]);
+        if (r2>=0) drawCell(r2, c2, COLORS[state.current.type], 1, false, 14);
+      }
+    }
+
+    // particles
+    if (settings.effects && state.particles.length){
+      var alive = [];
+      for (var pi=0; pi<state.particles.length; pi++){
+        var p = state.particles[pi];
+        p.x += p.vx*(dt/16); p.y += p.vy*(dt/16);
+        p.vx *= 0.985; p.vy *= 0.985;
+        p.life -= dt;
+        if (p.life > 0){
+          ctx.globalAlpha = Math.max(0, p.life/p.maxLife);
+          ctx.shadowColor = p.color; ctx.shadowBlur = 8;
+          ctx.fillStyle = p.color;
+          ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI*2); ctx.fill();
+          ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+          alive.push(p);
+        }
+      }
+      state.particles = alive;
+    }
+
+    ctx.restore();
+
+    var grad = ctx.createRadialGradient(CX,CY,0,CX,CY,R_MIN*1.6);
+    grad.addColorStop(0, 'rgba(0,255,242,0.5)');
+    grad.addColorStop(1, 'rgba(0,255,242,0)');
+    ctx.fillStyle = grad;
+    ctx.beginPath(); ctx.arc(CX,CY,R_MIN*1.6,0,Math.PI*2); ctx.fill();
+  }
+
+  function renderMiniPiece(canvasEl, type){
+    if (!canvasEl) return;
+    var mctx = canvasEl.getContext('2d');
+    var w = canvasEl.width, h = canvasEl.height;
+    mctx.clearRect(0,0,w,h);
+    if (!type) return;
+    var shape = SHAPES[type][0];
+    var minR=4,maxR=-1,minC=4,maxC=-1;
+    for (var i=0;i<shape.length;i++){
+      minR=Math.min(minR,shape[i][0]); maxR=Math.max(maxR,shape[i][0]);
+      minC=Math.min(minC,shape[i][1]); maxC=Math.max(maxC,shape[i][1]);
+    }
+    var bw = maxC-minC+1, bh = maxR-minR+1;
+    var cell = Math.floor(Math.min(w/(bw+1), h/(bh+1)));
+    var offX = (w - bw*cell)/2, offY = (h - bh*cell)/2;
+    mctx.shadowColor = COLORS[type]; mctx.shadowBlur = 8;
+    mctx.fillStyle = COLORS[type];
+    for (var j=0;j<shape.length;j++){
+      var x = offX + (shape[j][1]-minC)*cell;
+      var y = offY + (shape[j][0]-minR)*cell;
+      mctx.fillRect(x+1.5, y+1.5, cell-3, cell-3);
+    }
+    mctx.shadowBlur = 0;
+  }
+
+  /* ============================================================
+     UI SYNC
+     ============================================================ */
+  var holdCanvas = document.getElementById('hold-canvas');
+  var queueCanvases = document.querySelectorAll('.queue-list canvas');
+  var toastStack = document.getElementById('toast-stack');
+
+  function updateUI(){
+    document.getElementById('stat-score').textContent = state.score;
+    document.getElementById('stat-level').textContent = state.level;
+    document.getElementById('stat-lines').textContent = state.lines;
+    document.getElementById('stat-combo').textContent = Math.max(state.combo-1, 0);
+    var need = xpToNext(state.level);
+    document.getElementById('xp-current').textContent = state.xp;
+    document.getElementById('xp-needed').textContent = need;
+    document.getElementById('xp-fill').style.width = Math.min(100, (state.xp/need)*100) + '%';
+
+    renderMiniPiece(holdCanvas, state.holdType);
+    for (var i=0;i<queueCanvases.length;i++) renderMiniPiece(queueCanvases[i], state.queue[i]);
+
+    var dangerRows = 0;
+    for (var r=0;r<Math.min(3,RINGS);r++){
+      var filled = false;
+      for (var c=0;c<SECTORS;c++){ if(state.board[r][c]){ filled=true; break; } }
+      if (filled) dangerRows++;
+    }
+    document.getElementById('danger-vignette').classList.toggle('on', dangerRows>=2);
+  }
+
+  function updateComboUI(){ document.getElementById('stat-combo').textContent = Math.max(state.combo-1,0); }
+
+  function showToast(text, color){
+    var el = document.createElement('div');
+    el.className = 'toast';
+    el.style.color = color;
+    el.style.textShadow = '0 0 12px ' + color;
+    el.textContent = text;
+    toastStack.appendChild(el);
+    requestAnimationFrame(function(){ el.classList.add('show'); });
+    setTimeout(function(){
+      el.classList.remove('show');
+      setTimeout(function(){ if (el.parentNode) el.parentNode.removeChild(el); }, 250);
+    }, 900);
+  }
+
+  /* ============================================================
+     MAIN LOOP
+     ============================================================ */
+  function loop(ts){
+    if (!state.paused && !state.gameOver){
+      var dt = ts - (lastTs||ts);
+      lastTs = ts;
+
+      if (state.flashTimer > 0){
+        state.flashTimer -= dt;
+        if (state.flashTimer <= 0) finishClear();
+      } else {
+        state.dropTimer += dt;
+        if (state.dropTimer >= state.dropInterval){ state.dropTimer = 0; softDropStep(false); }
+      }
+      renderBoard(ts, dt);
+      updateUI();
+    } else {
+      lastTs = ts;
+    }
+    animHandle = requestAnimationFrame(loop);
+  }
+  function startLoop(){ lastTs = 0; if (animHandle) cancelAnimationFrame(animHandle); animHandle = requestAnimationFrame(loop); }
+  function stopLoop(){ if (animHandle){ cancelAnimationFrame(animHandle); animHandle = null; } }
+
+  /* ============================================================
+     NAVIGATION
+     ============================================================ */
+  function showScreen(id){
+    document.querySelectorAll('.screen').forEach(function(s){ s.classList.toggle('active', s.id===id); });
+  }
+  function renderLeaderboard(){
+    var el = document.getElementById('leaderboard-list');
+    if (sessionLeaderboard.length === 0){
+      el.innerHTML = '<div class="empty-rank">まだ記録がありません — 1面遊んで刻もう</div>';
+      return;
+    }
+    var html = '';
+    for (var i=0;i<sessionLeaderboard.length;i++){
+      var e = sessionLeaderboard[i];
+      html += '<div class="rank-row"><span class="rk">#' + (i+1) + '</span><span class="sc">' + e.score + '</span><span class="lv">Lv.' + e.level + ' / ' + e.lines + 'L</span></div>';
+    }
+    el.innerHTML = html;
+  }
+
+  document.getElementById('btn-start').addEventListener('click', function(){
+    ensureAudio();
+    resetState();
+    document.getElementById('pause-overlay').classList.remove('show');
+    document.getElementById('gameover-overlay').classList.remove('show');
+    showScreen('game-screen');
+    startLoop();
+  });
+  document.getElementById('btn-settings').addEventListener('click', function(){ showScreen('settings-screen'); });
+  document.getElementById('btn-settings-back').addEventListener('click', function(){ renderLeaderboard(); showScreen('home-screen'); });
+  document.getElementById('btn-retry').addEventListener('click', function(){
+    document.getElementById('gameover-overlay').classList.remove('show');
+    resetState(); startLoop();
+  });
+  document.getElementById('btn-home-from-over').addEventListener('click', function(){
+    document.getElementById('gameover-overlay').classList.remove('show');
+    renderLeaderboard(); showScreen('home-screen');
+  });
+  document.getElementById('btn-pause').addEventListener('click', togglePause);
+  document.getElementById('btn-resume').addEventListener('click', togglePause);
+  document.getElementById('btn-restart-from-pause').addEventListener('click', function(){
+    document.getElementById('pause-overlay').classList.remove('show');
+    resetState(); startLoop();
+  });
+  document.getElementById('btn-home-from-pause').addEventListener('click', function(){
+    document.getElementById('pause-overlay').classList.remove('show');
+    state.paused = false;
+    renderLeaderboard(); showScreen('home-screen');
+  });
+  document.getElementById('mute-btn').addEventListener('click', function(){
+    settings.sound = !settings.sound;
+    document.getElementById('toggle-sound').checked = settings.sound;
+    this.textContent = settings.sound ? '🔊' : '🔇';
+  });
+
+  function togglePause(){
+    if (!state || state.gameOver) return;
+    state.paused = !state.paused;
+    document.getElementById('pause-overlay').classList.toggle('show', state.paused);
+  }
+
+  /* ============================================================
+     SETTINGS WIRING
+     ============================================================ */
+  var segBoard = document.getElementById('seg-boardsize');
+  segBoard.querySelectorAll('button').forEach(function(btn){
+    if (btn.dataset.value === settings.boardSize) btn.classList.add('active');
+    btn.addEventListener('click', function(){
+      segBoard.querySelectorAll('button').forEach(function(b){ b.classList.remove('active'); });
+      btn.classList.add('active');
+      settings.boardSize = btn.dataset.value;
+    });
+  });
+
+  var rangeLevel = document.getElementById('range-startlevel');
+  var levelValueEl = document.getElementById('startlevel-value');
+  rangeLevel.addEventListener('input', function(){
+    settings.startLevel = parseInt(rangeLevel.value,10);
+    levelValueEl.textContent = settings.startLevel;
+  });
+
+  var rangeVolume = document.getElementById('range-volume');
+  var volumeValueEl = document.getElementById('volume-value');
+  rangeVolume.addEventListener('input', function(){
+    settings.volume = parseInt(rangeVolume.value,10)/100;
+    volumeValueEl.textContent = rangeVolume.value + '%';
+  });
+
+  document.getElementById('toggle-ghost').addEventListener('change', function(e){ settings.ghost = e.target.checked; });
+  document.getElementById('toggle-rotateboard').addEventListener('change', function(e){ settings.rotateBoard = e.target.checked; });
+  document.getElementById('toggle-effects').addEventListener('change', function(e){ settings.effects = e.target.checked; });
+  document.getElementById('toggle-sound').addEventListener('change', function(e){
+    settings.sound = e.target.checked;
+    document.getElementById('mute-btn').textContent = settings.sound ? '🔊' : '🔇';
+  });
+
+  /* ============================================================
+     KEYBOARD INPUT
+     ============================================================ */
+  window.addEventListener('keydown', function(e){
+    var gameActive = document.getElementById('game-screen').classList.contains('active');
+    if (!gameActive) return;
+    if (e.key === 'p' || e.key === 'P' || e.key === 'Escape'){ e.preventDefault(); togglePause(); return; }
+    if (state.paused || state.gameOver) return;
+    switch(e.key){
+      case 'ArrowLeft': e.preventDefault(); moveHorizontal(-1); break;
+      case 'ArrowRight': e.preventDefault(); moveHorizontal(1); break;
+      case 'ArrowUp': e.preventDefault(); rotatePiece(1); break;
+      case 'x': case 'X': rotatePiece(1); break;
+      case 'z': case 'Z': rotatePiece(-1); break;
+      case 'ArrowDown': e.preventDefault(); softDropStep(true); break;
+      case ' ': e.preventDefault(); hardDrop(); break;
+      case 'c': case 'C': case 'Shift': holdPiece(); break;
+    }
+  });
+
+  /* ============================================================
+     TOUCH CONTROLS
+     ============================================================ */
+  var TC_ACTIONS = {
+    left: function(){ moveHorizontal(-1); },
+    right: function(){ moveHorizontal(1); },
+    down: function(){ softDropStep(true); },
+    rotateL: function(){ rotatePiece(-1); },
+    rotateR: function(){ rotatePiece(1); },
+    hold: function(){ holdPiece(); },
+    harddrop: function(){ hardDrop(); }
+  };
+  var REPEATABLE = { left:true, right:true, down:true };
+  document.querySelectorAll('.tc-btn').forEach(function(btn){
+    var action = btn.dataset.action;
+    var repeatHandle = null;
+    function fire(){ if (!state || state.paused || state.gameOver) return; TC_ACTIONS[action](); }
+    function start(e){
+      e.preventDefault();
+      fire();
+      if (REPEATABLE[action]){
+        clearInterval(repeatHandle);
+        repeatHandle = setInterval(fire, 110);
+      }
+    }
+    function stop(e){ if(e) e.preventDefault(); clearInterval(repeatHandle); }
+    btn.addEventListener('touchstart', start, {passive:false});
+    btn.addEventListener('touchend', stop);
+    btn.addEventListener('touchcancel', stop);
+    btn.addEventListener('mousedown', start);
+    window.addEventListener('mouseup', stop);
+  });
+
+  /* ============================================================
+     INIT
+     ============================================================ */
+  renderLeaderboard();
+  resetState();
+  renderBoard(0, 0);
+
+})();
+</script>
+</body>
+</html>
